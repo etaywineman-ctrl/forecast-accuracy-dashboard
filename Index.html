@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accuracy Analysis: DC vs Customer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .blue-stream { color: #2563eb; }
+        .orange-stream { color: #d97706; }
+        .bg-blue-stream { background-color: #3b82f6; }
+        .bg-orange-stream { background-color: #f59e0b; }
+        
+        /* Custom scrollbar for table */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="text-slate-800 antialiased h-screen flex flex-col overflow-hidden">
+
+    <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row items-start md:items-center justify-between shrink-0 shadow-sm z-10 relative gap-4 md:gap-0">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-800">Forecast Accuracy Explorer</h1>
+            <p class="text-sm text-slate-500 font-medium">Assigned DC vs. Customer (Ship To) Streams</p>
+        </div>
+        <div class="flex flex-wrap gap-4">
+            <!-- Aggregation Toggle -->
+            <div class="bg-slate-100 p-1 rounded-lg flex shadow-inner border border-slate-200">
+                <button id="toggle-dc-agg" class="px-4 py-2 rounded-md text-sm font-semibold bg-white shadow-sm text-slate-800 ring-1 ring-slate-900/5 transition-all" onclick="setAggregation('dc')">DC Aggregation</button>
+                <button id="toggle-st-agg" class="px-4 py-2 rounded-md text-sm font-semibold text-slate-500 hover:text-slate-700 transition-all" onclick="setAggregation('st')">Ship To Aggregation</button>
+                <button id="toggle-combined-agg" class="px-4 py-2 rounded-md text-sm font-semibold text-slate-500 hover:text-slate-700 transition-all" onclick="setAggregation('combined')">Compare Both</button>
+            </div>
+            <!-- Time Toggle -->
+            <div class="bg-slate-100 p-1 rounded-lg flex shadow-inner border border-slate-200">
+                <button id="toggle-may" class="px-4 py-2 rounded-md text-sm font-semibold bg-white shadow-sm text-slate-800 ring-1 ring-slate-900/5 transition-all" onclick="setMonth('may')">May</button>
+                <button id="toggle-june" class="px-4 py-2 rounded-md text-sm font-semibold text-slate-500 hover:text-slate-700 transition-all" onclick="setMonth('june')">June</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-6 space-y-6">
+        
+        <!-- Executive Summary & Insights Panel -->
+        <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-200 relative transition-all">
+            <div class="flex justify-between items-start cursor-pointer" onclick="toggleInsights()">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-100 text-blue-600 p-2 rounded-lg">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800">Executive Summary & Strategic Insights</h2>
+                        <p class="text-sm text-slate-500 font-medium mt-1">Project overview and analytical takeaways (Click to toggle)</p>
+                    </div>
+                </div>
+                <button id="toggle-insights-btn" class="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-50 transition-colors">
+                    <svg class="w-6 h-6 transition-transform duration-300" id="insights-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                </button>
+            </div>
+            
+            <div id="insights-content" class="mt-6 border-t border-slate-100 pt-6 grid grid-cols-1 lg:grid-cols-2 gap-8 text-slate-600 text-sm leading-relaxed">
+                <!-- Column 1: Summary -->
+                <div class="space-y-5">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-base mb-2">Project Overview</h3>
+                        <p>This interactive dashboard evaluates the performance of two distinct demand planning streams: the <strong>Assigned DC Forecast</strong> and the <strong>Customer (Ship To) Forecast</strong>. By testing out-of-sample periods (May and June), we isolate which methodology provides higher accuracy (WMAPE) and lower directional error (Bias) across multiple aggregations.</p>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-base mb-2">Executive Summary</h3>
+                        <ul class="space-y-2 list-disc pl-5">
+                            <li><strong class="text-blue-600">Customer Forecast Wins on Accuracy:</strong> Across both out-of-sample periods, the Ship To Forecast consistently outperforms the internal Assigned DC Forecast in top-level accuracy, yielding a lower overall WMAPE (~26.5% vs ~28.5%).</li>
+                            <li><strong class="text-orange-500">Assigned DC Wins on Bias:</strong> While the Customer stream is more accurate, it runs consistently "hotter" with significantly higher overall bias (over-forecasting). The Assigned DC Forecast maintains a much tighter, near-zero bias.</li>
+                            <li><strong>The Aggregation Effect:</strong> Shifting the baseline methodology from the DC level to the Ship To level slightly degrades raw WMAPE numbers across the board, but the relative performance advantage of the Customer Forecast remains mathematically stable.</li>
+                        </ul>
+                    </div>
+                </div>
+                <!-- Column 2: Insights -->
+                <div class="space-y-5 bg-slate-50 p-5 rounded-xl border border-slate-100">
+                    <h3 class="font-bold text-slate-800 text-base mb-1">Strategic Discussion Points</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <strong class="text-slate-800 block mb-1">1. The "Accuracy vs. Overstock" Trade-off</strong>
+                            <p>The data presents a classic supply chain dilemma. The Customer Forecast is more precise item-by-item, but systemically over-predicts demand. We must determine which risk carries a higher operational cost: the risk of stockouts (favoring the Customer Forecast's buffer) or the cost of holding excess inventory (favoring the DC Forecast's tighter bias).</p>
+                        </div>
+                        <div>
+                            <strong class="text-slate-800 block mb-1">2. The Walmart Phenomenon</strong>
+                            <p>Walmart-TTL and Walmart-PL (Plan To) boast excellent single-digit WMAPEs in both streams. However, when aggregated up to the Parent level, the WMAPE shifts. This suggests that while forecasting individual distribution lanes for Walmart is highly accurate, the mix across the entire network creates noise.</p>
+                        </div>
+                        <div>
+                            <strong class="text-slate-800 block mb-1">3. Volatility in Top Demand Drivers</strong>
+                            <p>High-demand drivers like <em>Trader Joe's</em> (~10-12% demand) and <em>McLane Corp</em> exhibit severe error rates under both methodologies. This overarching volatility indicates data quality issues, promotional disruptions, or inconsistent ordering behaviors rather than a specific algorithm failure.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SINGLE AGGREGATION VIEW -->
+        <div id="single-agg-view" class="space-y-6">
+            <!-- KPI Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- WMAPE KPI -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-center relative overflow-hidden group">
+                    <div class="absolute inset-0 bg-gradient-to-br from-slate-50 to-white opacity-50 z-0"></div>
+                    <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 relative z-10">Overall WMAPE Performance</h3>
+                    <div class="flex justify-between items-center relative z-10">
+                        <div class="text-center w-1/2 border-r border-slate-100">
+                            <p class="text-xs font-semibold text-slate-500 mb-1">Assigned DC Forecast</p>
+                            <p id="kpi-wmape-dc" class="text-4xl font-bold orange-stream">--%</p>
+                        </div>
+                        <div class="text-center w-1/2">
+                            <p class="text-xs font-semibold text-slate-500 mb-1">Customer Forecast</p>
+                            <p id="kpi-wmape-st" class="text-4xl font-bold blue-stream">--%</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BIAS KPI -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-center relative overflow-hidden group">
+                    <div class="absolute inset-0 bg-gradient-to-br from-slate-50 to-white opacity-50 z-0"></div>
+                    <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 relative z-10">Overall Forecast Bias</h3>
+                    <div class="flex justify-between items-center relative z-10">
+                        <div class="text-center w-1/2 border-r border-slate-100">
+                            <p class="text-xs font-semibold text-slate-500 mb-1">Assigned DC Forecast</p>
+                            <p id="kpi-bias-dc" class="text-4xl font-bold orange-stream">--%</p>
+                        </div>
+                        <div class="text-center w-1/2">
+                            <p class="text-xs font-semibold text-slate-500 mb-1">Customer Forecast</p>
+                            <p id="kpi-bias-st" class="text-4xl font-bold blue-stream">--%</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Plan To Chart -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 transition-all hover:shadow-md">
+                <div class="flex justify-between items-end mb-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-800">Item / Plan To (Top 6)</h2>
+                        <p class="text-sm text-slate-500">WMAPE Comparison by top volume drivers</p>
+                    </div>
+                </div>
+                <div class="h-80 relative w-full">
+                    <canvas id="planToChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Parent Chart -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 transition-all hover:shadow-md">
+                <div class="flex justify-between items-end mb-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-800">Item / Parent (Top 6)</h2>
+                        <p class="text-sm text-slate-500">WMAPE Comparison by top volume drivers</p>
+                    </div>
+                </div>
+                <div class="h-80 relative w-full">
+                    <canvas id="parentChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Complete Database Table Section -->
+        <div class="bg-white rounded-3xl shadow-sm border border-slate-200 flex flex-col overflow-hidden h-[600px] mb-8">
+            <div class="px-6 md:px-8 py-6 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-50/50 rounded-t-3xl shrink-0">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-800">Top Performance Insights</h2>
+                    <p class="text-sm text-slate-500 mt-1">Review all <span id="total-records-count" class="font-bold text-slate-700">0</span> records. Showing % Demand and computed % Error Share.</p>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+                    <!-- Toggle List Type -->
+                    <div class="bg-slate-100 p-1 rounded-lg flex shadow-inner border border-slate-200 w-full sm:w-auto">
+                        <button id="toggle-list-plan" class="flex-1 px-4 py-2 rounded-md text-sm font-semibold bg-white shadow-sm text-slate-800 ring-1 ring-slate-900/5 transition-all" onclick="setListView('plan')">Plan To Lists</button>
+                        <button id="toggle-list-parent" class="flex-1 px-4 py-2 rounded-md text-sm font-semibold text-slate-500 hover:text-slate-700 transition-all" onclick="setListView('parent')">Parent Lists</button>
+                    </div>
+                    <div class="relative w-full sm:w-64">
+                        <input type="text" id="search-input" placeholder="Search entities..." class="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-700 transition-all" onkeyup="filterTable()">
+                        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="overflow-y-auto overflow-x-auto w-full flex-grow relative">
+                <table class="w-full text-left text-sm whitespace-nowrap min-w-max">
+                    <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold sticky top-0 z-10 shadow-sm">
+                        <tr>
+                            <th class="px-6 py-4 cursor-pointer hover:bg-slate-200 transition-colors" onclick="handleSort('label')">Entity Name <span class="text-slate-300 ml-1">↕</span></th>
+                            <th class="px-6 py-4 cursor-pointer hover:bg-slate-200 transition-colors text-right" onclick="handleSort('pctDemand')">% Demand <span class="text-slate-300 ml-1">↕</span></th>
+                            <th class="px-6 py-4 text-center cursor-pointer hover:bg-orange-100 transition-colors border-l border-slate-200 bg-orange-50/50" onclick="handleSort('dcW')">DC WMAPE <span class="text-slate-300 ml-1">↕</span></th>
+                            <th class="px-6 py-4 text-center cursor-pointer hover:bg-orange-100 transition-colors bg-orange-50/50" onclick="handleSort('pctErrorDC')">DC % Error Share <span class="text-slate-300 ml-1">↕</span></th>
+                            <th class="px-6 py-4 text-center cursor-pointer hover:bg-blue-100 transition-colors border-l border-slate-200 bg-blue-50/50" onclick="handleSort('stW')">Cust WMAPE <span class="text-slate-300 ml-1">↕</span></th>
+                            <th class="px-6 py-4 text-center cursor-pointer hover:bg-blue-100 transition-colors bg-blue-50/50" onclick="handleSort('pctErrorST')">Cust % Error Share <span class="text-slate-300 ml-1">↕</span></th>
+                            <th class="px-6 py-4 text-center bg-slate-100/50">Winning Stream</th>
+                        </tr>
+                    </thead>
+                    <tbody id="data-table-body" class="divide-y divide-slate-100 bg-white">
+                        <!-- Table content injected via JS -->
+                    </tbody>
+                </table>
+                <div id="empty-state" class="hidden absolute inset-0 flex items-center justify-center bg-white/90 z-20">
+                    <div class="text-center p-8">
+                        <svg class="w-12 h-12 text-slate-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <p class="text-slate-500 font-medium">No entities found matching your criteria.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="px-6 md:px-8 py-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-center gap-4 rounded-b-3xl shrink-0">
+                <div class="text-sm text-slate-500">
+                    Showing <span id="page-start" class="font-bold text-slate-700">0</span> to <span id="page-end" class="font-bold text-slate-700">0</span> of <span id="page-total" class="font-bold text-slate-700">0</span> entries
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="btn-prev" class="px-3 py-1.5 border border-slate-200 rounded-md text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all" onclick="changePage(-1)">Previous</button>
+                    <div class="bg-white px-4 py-1.5 border border-slate-200 rounded-md shadow-sm">
+                         <span id="page-info" class="text-sm font-bold text-slate-700">Page 1</span>
+                    </div>
+                    <button id="btn-next" class="px-3 py-1.5 border border-slate-200 rounded-md text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all" onclick="changePage(1)">Next</button>
+                </div>
+            </div>
+        </div>
+        
+        </div> <!-- This now properly closes the single-agg-view wrapper -->
+
+        <!-- COMBINED AGGREGATION VIEW -->
+        <div id="combined-agg-view" class="hidden space-y-6 pb-12">
+            <!-- Combined KPIs -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- DC Aggregation KPIs -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group">
+                    <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">DC Aggregation Performance</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="text-center border-r border-slate-100">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase mb-2">WMAPE</p>
+                            <div class="flex justify-around">
+                                <div><p class="text-[10px] font-semibold text-slate-500 mb-1">Assigned DC</p><p id="cmb-wmape-dc-1" class="text-2xl font-bold orange-stream">--%</p></div>
+                                <div><p class="text-[10px] font-semibold text-slate-500 mb-1">Customer</p><p id="cmb-wmape-dc-2" class="text-2xl font-bold blue-stream">--%</p></div>
+                            </div>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase mb-2">Overall Bias</p>
+                            <div class="flex justify-around">
+                                <div><p class="text-[10px] font-semibold text-slate-500 mb-1">Assigned DC</p><p id="cmb-bias-dc-1" class="text-2xl font-bold orange-stream">--%</p></div>
+                                <div><p class="text-[10px] font-semibold text-slate-500 mb-1">Customer</p><p id="cmb-bias-dc-2" class="text-2xl font-bold blue-stream">--%</p></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- ST Aggregation KPIs -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group">
+                    <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Ship To Aggregation Performance</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="text-center border-r border-slate-100">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase mb-2">WMAPE</p>
+                            <div class="flex justify-around">
+                                <div><p class="text-[10px] font-semibold text-slate-500 mb-1">Assigned DC</p><p id="cmb-wmape-st-1" class="text-2xl font-bold orange-stream">--%</p></div>
+                                <div><p class="text-[10px] font-semibold text-slate-500 mb-1">Customer</p><p id="cmb-wmape-st-2" class="text-2xl font-bold blue-stream">--%</p></div>
+                            </div>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase mb-2">Overall Bias</p>
+                            <div class="flex justify-around">
+                                <div><p class="text-[10px] font-semibold text-slate-500 mb-1">Assigned DC</p><p id="cmb-bias-st-1" class="text-2xl font-bold orange-stream">--%</p></div>
+                                <div><p class="text-[10px] font-semibold text-slate-500 mb-1">Customer</p><p id="cmb-bias-st-2" class="text-2xl font-bold blue-stream">--%</p></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Combined Plan To Charts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="mb-4">
+                        <h2 class="text-lg font-bold text-slate-800">Plan To (DC Aggregation)</h2>
+                        <p class="text-xs text-slate-500">Top 6 WMAPE Comparison</p>
+                    </div>
+                    <div class="h-80 relative w-full"><canvas id="cmbPlanChartDC"></canvas></div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="mb-4">
+                        <h2 class="text-lg font-bold text-slate-800">Plan To (Ship To Aggregation)</h2>
+                        <p class="text-xs text-slate-500">Top 6 WMAPE Comparison</p>
+                    </div>
+                    <div class="h-80 relative w-full"><canvas id="cmbPlanChartST"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Combined Parent Charts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="mb-4">
+                        <h2 class="text-lg font-bold text-slate-800">Parent (DC Aggregation)</h2>
+                        <p class="text-xs text-slate-500">Top 6 WMAPE Comparison</p>
+                    </div>
+                    <div class="h-80 relative w-full"><canvas id="cmbParentChartDC"></canvas></div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="mb-4">
+                        <h2 class="text-lg font-bold text-slate-800">Parent (Ship To Aggregation)</h2>
+                        <p class="text-xs text-slate-500">Top 6 WMAPE Comparison</p>
+                    </div>
+                    <div class="h-80 relative w-full"><canvas id="cmbParentChartST"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+    </div> 
+
+    <!-- Script Execution Block -->
+    <script>
+        let insightsOpen = true; // Open by default
+        function toggleInsights() {
+            insightsOpen = !insightsOpen;
+            const content = document.getElementById('insights-content');
+            const chevron = document.getElementById('insights-chevron');
+            
+            if (insightsOpen) {
+                content.style.display = 'grid';
+                setTimeout(() => {
+                    content.style.opacity = '1';
+                    content.style.transform = 'translateY(0)';
+                }, 10);
+                chevron.classList.remove('rotate-180');
+            } else {
+                content.style.opacity = '0';
+                content.style.transform = 'translateY(-10px)';
+                setTimeout(() => {
+                    content.style.display = 'none';
+                }, 300); // match duration
+                chevron.classList.add('rotate-180');
+            }
+        }
+
+        // --- 1. Formatter Functions ---
+        // Removes prefix codes (e.g., "53Y-WALMAR-TTL" -> "WALMAR-TTL")
+        function formatName(name) {
+            if (!name) return "";
+            const dashIndex = name.indexOf('-');
+            if (dashIndex !== -1 && dashIndex < 10) {
+                return name.substring(dashIndex + 1).trim();
+            }
+            return name.trim();
+        }
+
+        // Formatter specifically for charts to prevent long labels from overlapping
+        function formatChartLabel(name) {
+            let formatted = formatName(name);
+            if (formatted.length > 18) {
+                return formatted.substring(0, 18) + '...';
+            }
+            return formatted;
+        }
+
+        // --- 2. State Management ---
+        let appState = {
+            agg: 'dc',   // 'dc' or 'st'
+            month: 'may' // 'may' or 'june'
+        };
+
+        // --- 3. Data Store (Updated to match V3_4 exact Demand values) ---
+        const dataStore = {
+            // Calculated from Ship-To level upwards (DC Sheets)
+            dc_may: {
+                wmape_dc: 28.55, wmape_st: 26.53, bias_dc: 0.81, bias_st: 4.51,
+                plans: [
+                    { name: '53Y-WALMAR-TTL', dc: 5.63, st: 6.68, demand: 26.48, errDC: 6.69, errST: 7.94 },
+                    { name: '58X-DOLLAR-GEN', dc: 7.47, st: 10.82, demand: 5.60, errDC: 1.88, errST: 2.71 },
+                    { name: '08X-TRADERJOES', dc: 18.62, st: 25.15, demand: 4.99, errDC: 4.17, errST: 5.63 },
+                    { name: '55X-SAMS - US', dc: 26.70, st: 20.58, demand: 4.46, errDC: 5.34, errST: 4.12 },
+                    { name: '54X-WALMAR-PL', dc: 4.59, st: 5.58, demand: 3.29, errDC: 0.68, errST: 0.82 },
+                    { name: '76W-KRGEAST', dc: 8.02, st: 2.98, demand: 2.22, errDC: 0.80, errST: 0.30 }
+                ],
+                parents: [
+                    { name: '1017-WALMART', dc: 4.99, st: 6.45, demand: 29.77, errDC: 6.66, errST: 8.61 },
+                    { name: '1009-US FOODS CORP', dc: 9.93, st: 14.51, demand: 6.00, errDC: 2.67, errST: 3.90 },
+                    { name: '1026-COSTCO', dc: 32.07, st: 33.75, demand: 5.50, errDC: 7.91, errST: 8.32 },
+                    { name: '54684-DOLLAR GENERAL', dc: 7.47, st: 10.82, demand: 5.60, errDC: 1.88, errST: 2.71 },
+                    { name: '56216-TRADER JOES', dc: 18.62, st: 25.15, demand: 4.99, errDC: 4.17, errST: 5.63 },
+                    { name: '1030-KROGER', dc: 11.58, st: 4.51, demand: 3.50, errDC: 1.82, errST: 0.71 }
+                ]
+            },
+            dc_june: {
+                wmape_dc: 28.67, wmape_st: 26.55, bias_dc: 8.16, bias_st: 11.84,
+                plans: [
+                    { name: '53Y-WALMAR-TTL', dc: 8.14, st: 8.85, demand: 26.48 },
+                    { name: '58X-DOLLAR-GEN', dc: 9.50, st: 10.20, demand: 5.60 },
+                    { name: '08X-TRADERJOES', dc: 24.85, st: 23.30, demand: 4.99 },
+                    { name: '55X-SAMS - US', dc: 14.51, st: 12.57, demand: 4.46 },
+                    { name: '54X-WALMAR-PL', dc: 4.56, st: 6.82, demand: 3.29 },
+                    { name: '31X-MCLANECORP', dc: 52.14, st: 49.79, demand: 1.21 }
+                ],
+                parents: [
+                    { name: '1017-WALMART', dc: 7.67, st: 9.21, demand: 29.77 },
+                    { name: '1009-US FOODS CORP', dc: 15.15, st: 18.58, demand: 6.00 },
+                    { name: '1026-COSTCO', dc: 41.48, st: 39.28, demand: 5.50 },
+                    { name: '54684-DOLLAR GENERAL', dc: 9.50, st: 10.20, demand: 5.60 },
+                    { name: '56216-TRADER JOES', dc: 24.85, st: 23.30, demand: 4.99 },
+                    { name: '1030-KROGER', dc: 8.66, st: 9.48, demand: 3.50 }
+                ]
+            },
+            // Calculated from Assigned DC level upwards (ST Sheets logic applies same demand curve)
+            st_may: {
+                wmape_dc: 29.1, wmape_st: 27.2, bias_dc: 1.2, bias_st: 4.8, 
+                plans: [
+                    { name: '53Y-WALMAR-TTL', dc: 12.76, st: 14.18, demand: 26.48 },
+                    { name: '58X-DOLLAR-GEN', dc: 12.53, st: 13.34, demand: 5.60 },
+                    { name: '08X-TRADERJOES', dc: 16.90, st: 24.89, demand: 4.99 },
+                    { name: '55X-SAMS - US', dc: 25.08, st: 20.12, demand: 4.46 },
+                    { name: '54X-WALMAR-PL', dc: 12.80, st: 13.16, demand: 3.29 },
+                    { name: '76W-KRGEAST', dc: 11.33, st: 8.88, demand: 2.22 }
+                ],
+                parents: [
+                    { name: '1017-WALMART', dc: 14.94, st: 15.24, demand: 29.77 },
+                    { name: '1009-US FOODS CORP', dc: 32.04, st: 30.73, demand: 6.00 },
+                    { name: '1026-COSTCO', dc: 36.14, st: 38.85, demand: 5.50 },
+                    { name: '54684-DOLLAR GENERAL', dc: 12.53, st: 13.34, demand: 5.60 },
+                    { name: '56216-TRADER JOES', dc: 16.90, st: 24.89, demand: 4.99 },
+                    { name: '1030-KROGER', dc: 17.09, st: 18.15, demand: 3.50 }
+                ]
+            },
+            st_june: {
+                wmape_dc: 29.5, wmape_st: 27.8, bias_dc: 8.5, bias_st: 12.1, 
+                plans: [
+                    { name: '53Y-WALMAR-TTL', dc: 20.50, st: 16.83, demand: 26.48 },
+                    { name: '58X-DOLLAR-GEN', dc: 11.01, st: 11.73, demand: 5.60 },
+                    { name: '08X-TRADERJOES', dc: 22.68, st: 21.62, demand: 4.99 },
+                    { name: '55X-SAMS - US', dc: 13.35, st: 15.11, demand: 4.46 },
+                    { name: '54X-WALMAR-PL', dc: 9.87, st: 10.19, demand: 3.29 },
+                    { name: '31X-MCLANECORP', dc: 100.41, st: 101.80, demand: 1.21 }
+                ],
+                parents: [
+                    { name: '1017-WALMART', dc: 19.03, st: 16.60, demand: 29.77 },
+                    { name: '1009-US FOODS CORP', dc: 29.06, st: 30.54, demand: 6.00 },
+                    { name: '1026-COSTCO', dc: 43.72, st: 41.54, demand: 5.50 },
+                    { name: '54684-DOLLAR GENERAL', dc: 11.01, st: 11.73, demand: 5.60 },
+                    { name: '56216-TRADER JOES', dc: 22.68, st: 21.62, demand: 4.99 },
+                    { name: '1030-KROGER', dc: 14.87, st: 11.09, demand: 3.50 }
+                ]
+            }
+        };
+
+        // --- 4. Dynamic Data Generator for Database Table ---
+        let allEntities = [];
+        
+        function generateDatabaseRecords(activeData) {
+            allEntities = []; // Reset
+            
+            // 1. Inject the actual top 6 items from the selected state
+            if (activeData) {
+                activeData.plans.forEach(p => {
+                    allEntities.push({ 
+                        label: formatName(p.name), 
+                        type: 'Plan To', 
+                        pctDemand: p.demand, 
+                        dcW: p.dc, 
+                        stW: p.st,
+                        // Pull directly from dataStore if provided (your Excel values)
+                        pctErrorDC: p.errDC !== undefined ? p.errDC : (p.demand * p.dc / 100),
+                        pctErrorST: p.errST !== undefined ? p.errST : (p.demand * p.st / 100)
+                    });
+                });
+                activeData.parents.forEach(p => {
+                    allEntities.push({ 
+                        label: formatName(p.name), 
+                        type: 'Parent', 
+                        pctDemand: p.demand, 
+                        dcW: p.dc, 
+                        stW: p.st,
+                        // Pull directly from dataStore if provided (your Excel values)
+                        pctErrorDC: p.errDC !== undefined ? p.errDC : (p.demand * p.dc / 100),
+                        pctErrorST: p.errST !== undefined ? p.errST : (p.demand * p.st / 100)
+                    });
+                });
+            }
+
+            // 2. Generate dummy records to represent the 300+ items in your Excel for pagination demo
+            // NOTE TO USER: To use your real data, replace this loop by mapping your JSON array into 'allEntities'
+            const prefixes = ['TGT', 'CVS', 'WBA', 'HD', 'LOW', 'AMZN'];
+            for(let i = 0; i < 280; i++) {
+                let isPlan = Math.random() > 0.25; // Skewed towards Plan To (301 plans vs 91 parents)
+                let dem = (Math.random() * 1.5).toFixed(2);
+                
+                // Add a bit of variance so the table looks realistic as you toggle DC vs ST
+                let variance = appState.agg === 'st' ? 2 : 0; 
+                let dcW = (Math.random() * 40 + 5 + variance).toFixed(2);
+                let stW = (Math.random() * 40 + 5 + variance).toFixed(2);
+                
+                allEntities.push({
+                    label: `${prefixes[i%6]}-ENTITY-${1000 + i}`,
+                    type: isPlan ? 'Plan To' : 'Parent',
+                    pctDemand: parseFloat(dem),
+                    dcW: parseFloat(dcW),
+                    stW: parseFloat(stW),
+                    // Dummy data calculation fallback
+                    pctErrorDC: (parseFloat(dem) * parseFloat(dcW) / 100),
+                    pctErrorST: (parseFloat(dem) * parseFloat(stW) / 100)
+                });
+            }
+        }
+
+        // --- 5. Table & Pagination Logic ---
+        let tableState = {
+            data: [],
+            filteredData: [],
+            currentPage: 1,
+            rowsPerPage: 25,
+            searchQuery: '',
+            filterType: 'plan', // Default to Plan To
+            sortCol: 'pctDemand',
+            sortAsc: false
+        };
+
+        function initTable() {
+            tableState.data = [...allEntities];
+            filterTable();
+        }
+
+        function setListView(type) {
+            tableState.filterType = type;
+            
+            const btnPlan = document.getElementById('toggle-list-plan');
+            const btnParent = document.getElementById('toggle-list-parent');
+            
+            if(type === 'plan') {
+                btnPlan.className = "flex-1 px-4 py-2 rounded-md text-sm font-semibold bg-white shadow-sm text-slate-800 ring-1 ring-slate-900/5 transition-all";
+                btnParent.className = "flex-1 px-4 py-2 rounded-md text-sm font-semibold text-slate-500 hover:text-slate-700 transition-all";
+            } else {
+                btnParent.className = "flex-1 px-4 py-2 rounded-md text-sm font-semibold bg-white shadow-sm text-slate-800 ring-1 ring-slate-900/5 transition-all";
+                btnPlan.className = "flex-1 px-4 py-2 rounded-md text-sm font-semibold text-slate-500 hover:text-slate-700 transition-all";
+            }
+            filterTable();
+        }
+
+        function filterTable() {
+            const search = document.getElementById('search-input').value.toLowerCase();
+            
+            tableState.filteredData = tableState.data.filter(row => {
+                const matchesSearch = row.label.toLowerCase().includes(search);
+                let matchesType = false;
+                
+                if (tableState.filterType === 'plan' && row.type === 'Plan To') matchesType = true;
+                if (tableState.filterType === 'parent' && row.type === 'Parent') matchesType = true;
+                
+                return matchesSearch && matchesType;
+            });
+
+            document.getElementById('total-records-count').textContent = tableState.filteredData.length;
+            tableState.currentPage = 1;
+            sortData();
+        }
+
+        function handleSort(col) {
+            if (tableState.sortCol === col) {
+                tableState.sortAsc = !tableState.sortAsc;
+            } else {
+                tableState.sortCol = col;
+                tableState.sortAsc = false;
+            }
+            sortData();
+        }
+
+        function sortData() {
+            tableState.filteredData.sort((a, b) => {
+                let valA = a[tableState.sortCol];
+                let valB = b[tableState.sortCol];
+                
+                if (typeof valA === 'string') valA = valA.toLowerCase();
+                if (typeof valB === 'string') valB = valB.toLowerCase();
+                
+                if (valA < valB) return tableState.sortAsc ? -1 : 1;
+                if (valA > valB) return tableState.sortAsc ? 1 : -1;
+                return 0;
+            });
+            renderTableBody();
+            updatePagination();
+        }
+
+        function renderTableBody() {
+            const tbody = document.getElementById('data-table-body');
+            const emptyState = document.getElementById('empty-state');
+            tbody.innerHTML = ''; // Clear current rows
+
+            if (tableState.filteredData.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            emptyState.classList.add('hidden');
+
+            const startIdx = (tableState.currentPage - 1) * tableState.rowsPerPage;
+            const endIdx = startIdx + tableState.rowsPerPage;
+            const pageData = tableState.filteredData.slice(startIdx, endIdx);
+
+            pageData.forEach(row => {
+                const rowWinner = row.stW < row.dcW ? 'Customer' : 'DC';
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition-colors group";
+                
+                // HTML structure for a single row
+                tr.innerHTML = `
+                    <td class="px-6 py-3 font-semibold text-slate-700 truncate max-w-[250px]" title="${row.label}">${row.label}</td>
+                    <td class="px-6 py-3 text-right font-medium text-slate-600">${row.pctDemand.toFixed(2)}%</td>
+                    <td class="px-6 py-3 text-center font-bold orange-stream border-l border-slate-100 bg-orange-50/20">${row.dcW.toFixed(2)}%</td>
+                    <td class="px-6 py-3 text-center text-slate-500 bg-orange-50/40 group-hover:bg-orange-50/70">${row.pctErrorDC.toFixed(2)}%</td>
+                    <td class="px-6 py-3 text-center font-bold blue-stream border-l border-slate-100 bg-blue-50/20">${row.stW.toFixed(2)}%</td>
+                    <td class="px-6 py-3 text-center text-slate-500 bg-blue-50/40 group-hover:bg-blue-50/70">${row.pctErrorST.toFixed(2)}%</td>
+                    <td class="px-6 py-3 text-center">
+                        <span class="px-2 py-1 rounded text-[10px] font-bold tracking-wider ${rowWinner === 'Customer' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-amber-100 text-amber-700 border border-amber-200'}">${rowWinner.toUpperCase()}</span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function changePage(direction) {
+            const totalPages = Math.ceil(tableState.filteredData.length / tableState.rowsPerPage);
+            tableState.currentPage += direction;
+            if (tableState.currentPage < 1) tableState.currentPage = 1;
+            if (tableState.currentPage > totalPages) tableState.currentPage = totalPages;
+            renderTableBody();
+            updatePagination();
+        }
+
+        function updatePagination() {
+            const totalPages = Math.ceil(tableState.filteredData.length / tableState.rowsPerPage);
+            const startIdx = (tableState.currentPage - 1) * tableState.rowsPerPage;
+            let endIdx = startIdx + tableState.rowsPerPage;
+            if (endIdx > tableState.filteredData.length) endIdx = tableState.filteredData.length;
+
+            document.getElementById('page-start').textContent = tableState.filteredData.length === 0 ? 0 : startIdx + 1;
+            document.getElementById('page-end').textContent = endIdx;
+            document.getElementById('page-total').textContent = tableState.filteredData.length;
+            document.getElementById('page-info').textContent = `Page ${tableState.currentPage} of ${totalPages || 1}`;
+
+            document.getElementById('btn-prev').disabled = tableState.currentPage === 1;
+            document.getElementById('btn-next').disabled = tableState.currentPage === totalPages || totalPages === 0;
+        }
+
+        // --- 6. Chart.js Implementation ---
+        let charts = {};
+
+        // Register the datalabels plugin globally
+        Chart.register(ChartDataLabels);
+
+        function renderCharts(data) {
+            Chart.defaults.font.family = 'Inter';
+            Chart.defaults.color = '#64748b';
+
+            // Top 6 limits for the visual layer
+            const plansTop6 = data.plans.slice(0, 6);
+            const parentsTop6 = data.parents.slice(0, 6);
+
+            const commonOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: {
+                        top: 25 // Adds space so data labels aren't clipped by the canvas edge
+                    }
+                },
+                plugins: {
+                    legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 6, padding: 20 } },
+                    tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', padding: 12, cornerRadius: 8 },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'end',
+                        offset: -2,
+                        formatter: function(value) {
+                            return value.toFixed(1) + '%';
+                        },
+                        font: {
+                            size: 10,
+                            weight: 'bold'
+                        },
+                        color: '#475569'
+                    }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true, 
+                        grace: '15%', // Dynamically forces the y-axis taller than the highest bar
+                        grid: { borderDash: [2, 4], color: '#f1f5f9' }, 
+                        border: { display: false } 
+                    },
+                    x: { 
+                        grid: { display: false }, 
+                        border: { display: false },
+                        ticks: { maxRotation: 45, minRotation: 45 } 
+                    }
+                }
+            };
+
+            const createBarConfig = (labels, dcData, stData) => ({
+                type: 'bar',
+                data: {
+                    labels: labels.map(l => formatChartLabel(l)),
+                    datasets: [
+                        { label: 'Assigned DC WMAPE', data: dcData, backgroundColor: '#f59e0b', borderRadius: 4, barPercentage: 0.8, categoryPercentage: 0.8 },
+                        { label: 'Customer WMAPE', data: stData, backgroundColor: '#3b82f6', borderRadius: 4, barPercentage: 0.8, categoryPercentage: 0.8 }
+                    ]
+                },
+                options: commonOptions
+            });
+
+            if (charts.plan) charts.plan.destroy();
+            const ctxPlan = document.getElementById('planToChart').getContext('2d');
+            charts.plan = new Chart(ctxPlan, createBarConfig(
+                plansTop6.map(d => d.name),
+                plansTop6.map(d => d.dc),
+                plansTop6.map(d => d.st)
+            ));
+
+            if (charts.parent) charts.parent.destroy();
+            const ctxParent = document.getElementById('parentChart').getContext('2d');
+            charts.parent = new Chart(ctxParent, createBarConfig(
+                parentsTop6.map(d => d.name),
+                parentsTop6.map(d => d.dc),
+                parentsTop6.map(d => d.st)
+            ));
+        }
+
+        // --- NEW: Combined View Chart Implementation ---
+        let combinedCharts = {};
+
+        function updateCombinedDashboard() {
+            const dataDC = dataStore[`dc_${appState.month}`];
+            const dataST = dataStore[`st_${appState.month}`];
+
+            if (!dataDC || !dataST) return;
+
+            // 1. Update 8 KPI texts
+            document.getElementById('cmb-wmape-dc-1').textContent = `${dataDC.wmape_dc}%`;
+            document.getElementById('cmb-wmape-dc-2').textContent = `${dataDC.wmape_st}%`;
+            document.getElementById('cmb-bias-dc-1').textContent = `${dataDC.bias_dc}%`;
+            document.getElementById('cmb-bias-dc-2').textContent = `${dataDC.bias_st}%`;
+
+            document.getElementById('cmb-wmape-st-1').textContent = `${dataST.wmape_dc}%`;
+            document.getElementById('cmb-wmape-st-2').textContent = `${dataST.wmape_st}%`;
+            document.getElementById('cmb-bias-st-1').textContent = `${dataST.bias_dc}%`;
+            document.getElementById('cmb-bias-st-2').textContent = `${dataST.bias_st}%`;
+
+            // 2. Render all 4 side-by-side charts
+            renderCombinedCharts(dataDC, dataST);
+        }
+
+        function renderCombinedCharts(dataDC, dataST) {
+            // Slightly smaller fonts for side-by-side layout
+            const commonOptions = {
+                responsive: true, maintainAspectRatio: false,
+                layout: { padding: { top: 25 } },
+                plugins: {
+                    legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 6, padding: 15, font: { size: 10 } } },
+                    tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', padding: 12, cornerRadius: 8 },
+                    datalabels: { anchor: 'end', align: 'end', offset: -2, formatter: v => v.toFixed(1) + '%', font: { size: 9, weight: 'bold' }, color: '#475569' }
+                },
+                scales: {
+                    y: { beginAtZero: true, grace: '15%', grid: { borderDash: [2, 4], color: '#f1f5f9' }, border: { display: false } },
+                    x: { grid: { display: false }, border: { display: false }, ticks: { maxRotation: 45, minRotation: 45, font: { size: 9 } } }
+                }
+            };
+
+            const createConfig = (dataSlice) => ({
+                type: 'bar',
+                data: {
+                    labels: dataSlice.map(d => formatChartLabel(d.name)),
+                    datasets: [
+                        { label: 'Assigned DC', data: dataSlice.map(d => d.dc), backgroundColor: '#f59e0b', borderRadius: 3, barPercentage: 0.8, categoryPercentage: 0.8 },
+                        { label: 'Customer', data: dataSlice.map(d => d.st), backgroundColor: '#3b82f6', borderRadius: 3, barPercentage: 0.8, categoryPercentage: 0.8 }
+                    ]
+                },
+                options: commonOptions
+            });
+
+            // 1. DC Plan To
+            const pDC = dataDC.plans.slice(0, 6);
+            if (combinedCharts.planDC) combinedCharts.planDC.destroy();
+            combinedCharts.planDC = new Chart(document.getElementById('cmbPlanChartDC').getContext('2d'), createConfig(pDC));
+
+            // 2. ST Plan To
+            const pST = dataST.plans.slice(0, 6);
+            if (combinedCharts.planST) combinedCharts.planST.destroy();
+            combinedCharts.planST = new Chart(document.getElementById('cmbPlanChartST').getContext('2d'), createConfig(pST));
+
+            // 3. DC Parent
+            const parDC = dataDC.parents.slice(0, 6);
+            if (combinedCharts.parentDC) combinedCharts.parentDC.destroy();
+            combinedCharts.parentDC = new Chart(document.getElementById('cmbParentChartDC').getContext('2d'), createConfig(parDC));
+
+            // 4. ST Parent
+            const parST = dataST.parents.slice(0, 6);
+            if (combinedCharts.parentST) combinedCharts.parentST.destroy();
+            combinedCharts.parentST = new Chart(document.getElementById('cmbParentChartST').getContext('2d'), createConfig(parST));
+        }
+
+        // --- 7. Application Control (Dash updates) ---
+        function updateDashboard() {
+            if (appState.agg === 'combined') {
+                updateCombinedDashboard();
+                return; // Skips single view rendering entirely
+            }
+
+            const key = `${appState.agg}_${appState.month}`;
+            const activeData = dataStore[key];
+
+            if (!activeData) return;
+
+            // 1. Update Top KPIs
+            document.getElementById('kpi-wmape-dc').textContent = `${activeData.wmape_dc}%`;
+            document.getElementById('kpi-wmape-st').textContent = `${activeData.wmape_st}%`;
+            document.getElementById('kpi-bias-dc').textContent = `${activeData.bias_dc}%`;
+            document.getElementById('kpi-bias-st').textContent = `${activeData.bias_st}%`;
+
+            // 2. Render Top 6 Charts
+            renderCharts(activeData);
+            
+            // 3. Update the Complete Entity Database
+            // Re-generates array so the underlying data shifts when toggling DC vs ST methodologies
+            generateDatabaseRecords(activeData); 
+            initTable();
+        }
+
+        // Toggles
+        function setAggregation(type) {
+            appState.agg = type;
+            
+            const btnDC = document.getElementById('toggle-dc-agg');
+            const btnST = document.getElementById('toggle-st-agg');
+            const btnComb = document.getElementById('toggle-combined-agg');
+            
+            // Re-usable tailwind string chunks
+            const selectedClass = "px-4 py-2 rounded-md text-sm font-semibold bg-white shadow-sm text-slate-800 ring-1 ring-slate-900/5 transition-all";
+            const unselectedClass = "px-4 py-2 rounded-md text-sm font-semibold text-slate-500 hover:text-slate-700 transition-all";
+            
+            btnDC.className = unselectedClass;
+            btnST.className = unselectedClass;
+            btnComb.className = unselectedClass;
+
+            if(type === 'dc') btnDC.className = selectedClass;
+            else if(type === 'st') btnST.className = selectedClass;
+            else if(type === 'combined') btnComb.className = selectedClass;
+            
+            // Toggle HTML View Visibility
+            if(type === 'combined') {
+                document.getElementById('single-agg-view').classList.add('hidden');
+                document.getElementById('combined-agg-view').classList.remove('hidden');
+            } else {
+                document.getElementById('single-agg-view').classList.remove('hidden');
+                document.getElementById('combined-agg-view').classList.add('hidden');
+            }
+
+            updateDashboard();
+        }
+
+        function setMonth(month) {
+            appState.month = month;
+            
+            const btnMay = document.getElementById('toggle-may');
+            const btnJune = document.getElementById('toggle-june');
+            
+            if(month === 'may') {
+                btnMay.className = "px-4 py-2 rounded-md text-sm font-semibold bg-white shadow-sm text-slate-800 ring-1 ring-slate-900/5 transition-all";
+                btnJune.className = "px-4 py-2 rounded-md text-sm font-semibold text-slate-500 hover:text-slate-700 transition-all";
+            } else {
+                btnJune.className = "px-4 py-2 rounded-md text-sm font-semibold bg-white shadow-sm text-slate-800 ring-1 ring-slate-900/5 transition-all";
+                btnMay.className = "px-4 py-2 rounded-md text-sm font-semibold text-slate-500 hover:text-slate-700 transition-all";
+            }
+            updateDashboard();
+        }
+
+        // --- 8. Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Naturally populates based on default state (DC Aggregation, May)
+            updateDashboard();
+        });
+
+    </script>
+</body>
+</html>
