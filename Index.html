@@ -26,7 +26,7 @@
 
     <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row items-start md:items-center justify-between shrink-0 shadow-sm z-10 relative gap-4 md:gap-0">
         <div>
-            <h1 class="text-2xl font-bold text-slate-800">Forecast Accuracy Explorer</h1>
+            <h1 class="text-2xl font-bold text-slate-800">Forecast Accuracy Comparison</h1>
             <p class="text-sm text-slate-500 font-medium">Assigned DC vs. Customer (Ship To) Streams</p>
         </div>
         <div class="flex flex-wrap gap-4">
@@ -46,7 +46,12 @@
 
     <div class="flex-1 overflow-y-auto p-6 space-y-6">
         
-        <!-- Executive Summary & Insights Panel -->
+        <!-- ===============================================================
+             EXECUTIVE SUMMARY & STRATEGIC INSIGHTS (HIDDEN IN COMMENTS)
+             To make this visible on the dashboard again, simply remove the 
+             opening "< ! - -" and closing "- - >" tags wrapping this block.
+             =============================================================== -->
+        <!-- 
         <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-200 relative transition-all">
             <div class="flex justify-between items-start cursor-pointer" onclick="toggleInsights()">
                 <div class="flex items-center gap-3">
@@ -64,7 +69,6 @@
             </div>
             
             <div id="insights-content" class="mt-6 border-t border-slate-100 pt-6 grid grid-cols-1 lg:grid-cols-2 gap-8 text-slate-600 text-sm leading-relaxed">
-                <!-- Column 1: Summary -->
                 <div class="space-y-5">
                     <div>
                         <h3 class="font-bold text-slate-800 text-base mb-2">Project Overview</h3>
@@ -79,7 +83,6 @@
                         </ul>
                     </div>
                 </div>
-                <!-- Column 2: Insights -->
                 <div class="space-y-5 bg-slate-50 p-5 rounded-xl border border-slate-100">
                     <h3 class="font-bold text-slate-800 text-base mb-1">Strategic Discussion Points</h3>
                     <div class="space-y-4">
@@ -99,6 +102,7 @@
                 </div>
             </div>
         </div>
+        -->
 
         <!-- SINGLE AGGREGATION VIEW -->
         <div id="single-agg-view" class="space-y-6">
